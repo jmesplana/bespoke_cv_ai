@@ -25,802 +25,845 @@
 <body>
     <div id="root"></div>
     <script type="text/babel">
+        const { useState, useEffect } = React;
+        
         function App() {
             const defaultPrompts = {
-    analysis: "You are an expert ATS system and HR recruiter. Analyze the CV and job description for compatibility. Return a JSON object with matchPercentage (number), matchingKeywords (array), missingKeywords (array), and suggestions (array).",
-    coverLetter: "You are an expert cover letter writer. Generate a compelling cover letter based on the CV and job description.",
-    interview: "You are an expert interviewer. Generate relevant interview questions and suggested answers based on the CV and job description. Return a JSON array of objects with these exact properties: {'question': 'string', 'suggestedAnswer': 'string'}. Generate exactly 5 questions.",
-    salary: "You are an expert salary negotiator. Analyze the job description and provide salary range and negotiation tips. Return a JSON object with salaryRange (object with min and max) and negotiationTips (array)."
-};
+                analysis: "You are an expert ATS system and HR recruiter. Analyze the CV and job description for compatibility. Return a JSON object with matchPercentage (number), matchingKeywords (array), missingKeywords (array), and suggestions (array).",
+                coverLetter: "You are an expert cover letter writer. Generate a compelling cover letter based on the CV and job description.",
+                interview: "You are an expert interviewer. Generate relevant interview questions and suggested answers based on the CV and job description. Return a JSON array of objects with these exact properties: {'question': 'string', 'suggestedAnswer': 'string'}. Generate exactly 5 questions.",
+                salary: "You are an expert salary negotiator. Analyze the job description and provide salary range and negotiation tips. Return a JSON object with salaryRange (object with min and max) and negotiationTips (array)."
+            };
 
-    // State management
-    const [apiKey, setApiKey] = useState('');
-    const [step, setStep] = useState(0);
-    const [showGettingStarted, setShowGettingStarted] = useState(true);
-    const [loading, setLoading] = useState(false);
-    const [cv, setCV] = useState('');
-    const [jobDescription, setJobDescription] = useState('');
-    const [analysis, setAnalysis] = useState(null);
-    const [coverLetter, setCoverLetter] = useState('');
-    const [interviewQuestions, setInterviewQuestions] = useState([]);
-    const [salaryInfo, setSalaryInfo] = useState(null);
-    const [showSettings, setShowSettings] = useState(false);
-    const [prompts, setPrompts] = useState(defaultPrompts);
+            // State management
+            const [apiKey, setApiKey] = useState('');
+            const [apiModel, setApiModel] = useState(localStorage.getItem('api_model') || 'o3-mini');
+            const [modelEffort, setModelEffort] = useState(localStorage.getItem('model_effort') || 'medium');
+            const [step, setStep] = useState(0);
+            const [showGettingStarted, setShowGettingStarted] = useState(true);
+            const [loading, setLoading] = useState(false);
+            const [cv, setCV] = useState('');
+            const [jobDescription, setJobDescription] = useState('');
+            const [analysis, setAnalysis] = useState(null);
+            const [coverLetter, setCoverLetter] = useState('');
+            const [interviewQuestions, setInterviewQuestions] = useState([]);
+            const [salaryInfo, setSalaryInfo] = useState(null);
+            const [showSettings, setShowSettings] = useState(false);
+            const [prompts, setPrompts] = useState(defaultPrompts);
 
-    // Add the functions here
-    const savePrompts = (newPrompts) => {
-        localStorage.setItem('prompts', JSON.stringify(newPrompts));
-        setPrompts(newPrompts);
-    };
+            // Save and reset prompt functions
+            const savePrompts = (newPrompts) => {
+                localStorage.setItem('prompts', JSON.stringify(newPrompts));
+                setPrompts(newPrompts);
+            };
 
-    const resetPrompts = () => {
-        localStorage.removeItem('prompts');
-        setPrompts(defaultPrompts);
-    };
+            const resetPrompts = () => {
+                localStorage.removeItem('prompts');
+                setPrompts(defaultPrompts);
+            };
 
+            // Load saved data on mount
+            useEffect(() => {
+                const savedKey = localStorage.getItem('openai_api_key');
+                const savedPrompts = localStorage.getItem('prompts');
+                if (savedKey) {
+                    setApiKey(savedKey);
+                    setStep(1);
+                }
+                if (savedPrompts) {
+                    setPrompts(JSON.parse(savedPrompts));
+                }
+            }, []);
 
-        // Load saved data on mount
-        useEffect(() => {
-            const savedKey = localStorage.getItem('openai_api_key');
-            const savedPrompts = localStorage.getItem('prompts');
-            if (savedKey) {
-                setApiKey(savedKey);
-                setStep(1);
-            }
-            if (savedPrompts) {
-                setPrompts(JSON.parse(savedPrompts));
-            }
-        }, []);
+            // Step definitions
+            const steps = [
+                { number: 1, title: "Document Upload", instruction: "Upload your CV and the job description to begin the analysis process." },
+                { number: 2, title: "ATS Analysis", instruction: "Get your CV analyzed against ATS requirements and receive a compatibility score." },
+                { number: 3, title: "CV Optimization", instruction: "Review matching keywords and get suggestions for improvement." },
+                { number: 4, title: "Cover Letter", instruction: "Generate a customized cover letter based on your CV and the job description." },
+                { number: 5, title: "Interview Prep", instruction: "Prepare for your interview with custom questions and STAR format answers." },
+                { number: 6, title: "Salary Analysis", instruction: "Get salary insights and negotiation tips for your target position." }
+            ];
 
-    
-    // Step definitions
-    const steps = [
-        { number: 1, title: "Document Upload", instruction: "Upload your CV and the job description to begin the analysis process." },
-        { number: 2, title: "ATS Analysis", instruction: "Get your CV analyzed against ATS requirements and receive a compatibility score." },
-        { number: 3, title: "CV Optimization", instruction: "Review matching keywords and get suggestions for improvement." },
-        { number: 4, title: "Cover Letter", instruction: "Generate a customized cover letter based on your CV and the job description." },
-        { number: 5, title: "Interview Prep", instruction: "Prepare for your interview with custom questions and STAR format answers." },
-        { number: 6, title: "Salary Analysis", instruction: "Get salary insights and negotiation tips for your target position." }
-    ];
+            // Navigation functions
+            const canNavigateToStep = (targetStep) => {
+                if (targetStep === 1) return true;
+                if (targetStep === 2) return cv && jobDescription;
+                if (targetStep === 3) return analysis !== null;
+                if (targetStep === 4) return coverLetter !== '';
+                if (targetStep === 5) return interviewQuestions.length > 0;
+                if (targetStep === 6) return salaryInfo !== null;
+                return false;
+            };
 
+            const handleStepClick = (targetStep) => {
+                if (canNavigateToStep(targetStep)) {
+                    setStep(targetStep);
+                }
+            };
 
-    // Navigation functions
-    const canNavigateToStep = (targetStep) => {
-        if (targetStep === 1) return true;
-        if (targetStep === 2) return cv && jobDescription;
-        if (targetStep === 3) return analysis !== null;
-        if (targetStep === 4) return coverLetter !== '';
-        if (targetStep === 5) return interviewQuestions.length > 0;
-        if (targetStep === 6) return salaryInfo !== null;
-        return false;
-    };
-
-    const handleStepClick = (targetStep) => {
-        if (canNavigateToStep(targetStep)) {
-            setStep(targetStep);
-        }
-    };
-
-    // Navigation Component
-    const StepNavigation = () => (
-    <div className="mb-8">
-        <div className="flex justify-between mb-2">
-            <button
-                onClick={() => {
-                    setShowGettingStarted(true);
-                    setStep(0);
-                }}
-                className={`text-sm px-3 py-1 rounded transition-colors
-                    ${showGettingStarted ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}
-            >
-                Getting Started
-            </button>
-            {steps.map((s) => (
-                <button
-                    key={s.number}
-                    onClick={() => {
-                        setShowGettingStarted(false);
-                        handleStepClick(s.number);
-                    }}
-                    className={`text-sm px-3 py-1 rounded transition-colors
-                        ${!showGettingStarted && step === s.number ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}
-                >
-                    {s.title}
-                </button>
-            ))}
-        </div>
-        <div className="h-2 bg-gray-200 rounded">
-            <div 
-                className="h-2 bg-blue-600 rounded transition-all duration-500"
-                style={{ width: `${(step / steps.length) * 100}%` }}
-            />
-        </div>
-        {!showGettingStarted && step > 0 && (
-            <div className="mt-2 text-sm text-gray-600">
-                {steps[step - 1].instruction}
-            </div>
-        )}
-    </div>
-);
-
-const GettingStartedSection = () => (
-    <div className="space-y-8">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-            <h2 className="text-3xl font-bold mb-6">Welcome to Bespoke CV AI Job Application Assistant</h2>
-            
-            {/* New API Key Instructions */}
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
-                <h3 className="text-lg font-semibold text-yellow-800 mb-2">🔑 Important: OpenAI API Key Required</h3>
-                <p className="text-yellow-700">
-                    This tool uses OpenAI's powerful AI to analyze your applications. You'll need to provide your OpenAI API key in the settings section (upper right) to get started. 
-                    You can get your API key from the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">OpenAI dashboard</a>.
-                </p>
-            </div>
-
-            <div className="space-y-6 text-gray-600">
-                <p className="text-lg">This tool helps you optimize your job application process from start to finish. Here's what you can do:</p>
-                
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
-                        <h3 className="text-xl font-semibold text-blue-600 mb-3">🎯 ATS Optimization</h3>
-                        <p>Our AI-powered system analyzes your CV against job descriptions to ensure it passes Applicant Tracking Systems (ATS). Get detailed feedback and improvement suggestions.</p>
-                    </div>
-                    
-                    <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
-                        <h3 className="text-xl font-semibold text-blue-600 mb-3">📝 Custom Cover Letter</h3>
-                        <p>Generate tailored cover letters that highlight your relevant skills and experience for specific positions. Save time while maintaining professionalism.</p>
-                    </div>
-                    
-                    <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
-                        <h3 className="text-xl font-semibold text-blue-600 mb-3">🎤 Interview Preparation</h3>
-                        <p>Get customized interview questions and STAR-format answers based on your experience and the job requirements. Be prepared for your interview.</p>
-                    </div>
-                    
-                    <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
-                        <h3 className="text-xl font-semibold text-blue-600 mb-3">💰 Salary Insights</h3>
-                        <p>Receive salary range estimates and negotiation tips specific to the position and your qualifications. Enter negotiations with confidence.</p>
-                    </div>
-                </div>
-
-                {/* Updated button section with API key status */}
-                <div className="flex flex-col items-center mt-8 space-y-4">
-                    {!apiKey ? (
-                        <div className="text-center">
-                            <p className="text-red-600 mb-2">⚠️ Please add your OpenAI API key in Settings first</p>
-                            <button
-                                onClick={() => setShowSettings(true)}
-                                className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold transition-colors"
-                            >
-                                Add API Key in Settings
-                            </button>
-                        </div>
-                    ) : (
+            // Navigation Component
+            const StepNavigation = () => (
+                <div className="mb-8">
+                    <div className="flex justify-between mb-2">
                         <button
                             onClick={() => {
-                                if (!apiKey) {
-                                    setShowSettings(true);
-                                } else {
+                                setShowGettingStarted(true);
+                                setStep(0);
+                            }}
+                            className={`text-sm px-3 py-1 rounded transition-colors
+                                ${showGettingStarted ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                        >
+                            Getting Started
+                        </button>
+                        {steps.map((s) => (
+                            <button
+                                key={s.number}
+                                onClick={() => {
                                     setShowGettingStarted(false);
-                                    setStep(1);
-                                }
-                            }}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold transition-colors"
-                        >
-                            Let's Get Started →
-                        </button>
-                    )}
-                </div>
-            </div>
-        </div>
-    </div>
-);
-
-    // Document Upload Component
-    const DocumentUpload = () => (
-        <div className="space-y-6">
-            <div>
-                <div className="flex justify-between items-center mb-2">
-                    <label className="block font-semibold">Your CV</label>
-                    <button
-                        onClick={() => setCV('')}
-                        className="text-sm text-red-600 hover:text-red-700"
-                    >
-                        Clear
-                    </button>
-                </div>
-                <textarea
-                    className="w-full h-48 p-4 border rounded font-mono text-sm"
-                    placeholder="Paste your CV here..."
-                    value={cv}
-                    onChange={(e) => setCV(e.target.value)}
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                    Paste your CV in plain text format. Include your experience, skills, and qualifications.
-                </p>
-            </div>
-            
-            <div>
-                <div className="flex justify-between items-center mb-2">
-                    <label className="block font-semibold">Job Description</label>
-                    <button
-                        onClick={() => setJobDescription('')}
-                        className="text-sm text-red-600 hover:text-red-700"
-                    >
-                        Clear
-                    </button>
-                </div>
-                <textarea
-                    className="w-full h-48 p-4 border rounded font-mono text-sm"
-                    placeholder="Paste the job description here..."
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                />
-                <p className="mt-1 text-sm text-gray-500">
-                    Paste the complete job description, including requirements and responsibilities.
-                </p>
-            </div>
-
-            <div className="flex justify-between items-center">
-                <p className="text-sm text-gray-600">
-                    Both fields are required to proceed with the analysis.
-                </p>
-                <button
-                    onClick={() => setStep(2)}
-                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors
-                        disabled:bg-gray-300 disabled:cursor-not-allowed"
-                    disabled={!cv || !jobDescription}
-                >
-                    Start Analysis
-                </button>
-            </div>
-        </div>
-    );
-    // API call function
-    const makeApiCall = async (prompt, content) => {
-        try {
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey.trim()}` // Added trim() to remove any whitespace
-                },
-                body: JSON.stringify({
-                    model: "gpt-4",
-                    messages: [
-                        { role: "system", content: prompt },
-                        { role: "user", content: content }
-                    ],
-                    temperature: 0.7
-                })
-            });
-    
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error?.message || 'API request failed');
-            }
-    
-            const data = await response.json();
-            return data.choices[0].message.content;
-        } catch (error) {
-            console.error('API Error:', error);
-            throw new Error(`API request failed: ${error.message}`);
-        }
-    };
-
-    // Analysis Section Component
-    const AnalysisSection = () => (
-        <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-800 mb-2">What happens in this step?</h3>
-                <p className="text-sm text-blue-600">
-                    Our AI will analyze your CV against the job description using ATS algorithms.
-                    You'll receive a compatibility score, keyword analysis, and specific improvements.
-                </p>
-            </div>
-
-            <button
-                onClick={analyzeCV}
-                disabled={loading}
-                className="w-full bg-blue-500 text-white px-4 py-3 rounded hover:bg-blue-600 
-                    transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
-            >
-                {loading ? (
-                    <>
-                        <div className="loader" />
-                        <span>Analyzing Your CV...</span>
-                    </>
-                ) : (
-                    <>
-                        <span className="text-xl">🎯</span>
-                        <span>Start ATS Analysis</span>
-                    </>
-                )}
-            </button>
-        </div>
-    );
-
-    // Analysis function
-    const analyzeCV = async () => {
-        setLoading(true);
-        try {
-            const result = await makeApiCall(
-                prompts.analysis,
-                `CV:\n${cv}\n\nJob Description:\n${jobDescription}`
-            );
-            setAnalysis(JSON.parse(result));
-            setStep(3);
-        } catch (error) {
-            alert('Error analyzing CV: ' + error.message);
-        }
-        setLoading(false);
-    };
-    // Results Display Component
-    const ResultsSection = () => (
-        <div className="space-y-6">
-            <div className="bg-white rounded-lg border p-6">
-                <div className="text-center mb-8">
-                    <div className="inline-block p-4 bg-blue-50 rounded-full mb-2">
-                        <div className="text-4xl font-bold text-blue-600">
-                            {analysis.matchPercentage}%
-                        </div>
-                        <div className="text-sm text-blue-800">ATS Match Score</div>
-                    </div>
-                    
-                    <div className="mt-2 text-gray-600">
-                        {analysis.matchPercentage >= 80 
-                            ? "Excellent match! Your CV is well-aligned with the job requirements."
-                            : analysis.matchPercentage >= 60
-                                ? "Good match with room for improvement. Consider the suggestions below."
-                                : "Consider revising your CV based on the suggestions below to improve matching."}
-                    </div>
-                </div>
-
-                <div className="grid md:grid-cols-2 gap-6">
-                    <div className="space-y-3">
-                        <h3 className="font-semibold text-gray-800">✓ Matching Keywords</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {analysis.matchingKeywords.map((keyword, index) => (
-                                <span key={index} className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
-                                    {keyword}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-
-                    <div className="space-y-3">
-                        <h3 className="font-semibold text-gray-800">⚠ Missing Keywords</h3>
-                        <div className="flex flex-wrap gap-2">
-                            {analysis.missingKeywords.map((keyword, index) => (
-                                <span key={index} className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-sm">
-                                    {keyword}
-                                </span>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mt-6">
-                    <h3 className="font-semibold text-gray-800 mb-3">📝 Improvement Suggestions</h3>
-                    <div className="space-y-2">
-                        {analysis.suggestions.map((suggestion, index) => (
-                            <div key={index} className="flex items-start gap-2 bg-gray-50 p-3 rounded">
-                                <span className="text-blue-500">•</span>
-                                <span className="text-gray-700">{suggestion}</span>
-                            </div>
+                                    handleStepClick(s.number);
+                                }}
+                                className={`text-sm px-3 py-1 rounded transition-colors
+                                    ${!showGettingStarted && step === s.number ? 'text-blue-600 bg-blue-50' : 'text-gray-600 hover:bg-gray-50'}`}
+                            >
+                                {s.title}
+                            </button>
                         ))}
                     </div>
+                    <div className="h-2 bg-gray-200 rounded">
+                        <div 
+                            className="h-2 bg-blue-600 rounded transition-all duration-500"
+                            style={{ width: `${(step / steps.length) * 100}%` }}
+                        />
+                    </div>
+                    {!showGettingStarted && step > 0 && (
+                        <div className="mt-2 text-sm text-gray-600">
+                            {steps[step - 1].instruction}
+                        </div>
+                    )}
                 </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-                <button
-                    onClick={() => setStep(1)}
-                    className="text-gray-600 hover:text-gray-800"
-                >
-                    ← Edit Documents
-                </button>
-                <button
-                    onClick={generateCoverLetter}
-                    disabled={loading}
-                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 
-                        transition-colors disabled:bg-gray-400 flex items-center gap-2"
-                >
-                    {loading ? (
-                        <>
-                            <div className="loader" />
-                            <span>Generating...</span>
-                        </>
-                    ) : (
-                        <>
-                            <span>Generate Cover Letter →</span>
-                        </>
-                    )}
-                </button>
-            </div>
-        </div>
-    );
-// Cover Letter Component
-const CoverLetterSection = () => (
-        <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-800 mb-2">About Your Cover Letter</h3>
-                <p className="text-sm text-blue-600">
-                    This cover letter is generated based on your CV and the job description, highlighting your most relevant experiences and skills.
-                    Feel free to edit and personalize it further.
-                </p>
-            </div>
-
-            <div className="border rounded-lg p-4">
-                <textarea
-                    className="w-full h-96 p-4 font-mono text-sm focus:outline-none"
-                    value={coverLetter}
-                    onChange={(e) => setCoverLetter(e.target.value)}
-                    placeholder="Your cover letter will appear here..."
-                />
-            </div>
-
-            <div className="flex justify-between items-center">
-                <button
-                    onClick={generateCoverLetter}  // This was the issue - both buttons were using generateCoverLetter
-                    disabled={loading}
-                    className="text-blue-600 hover:text-blue-700 flex items-center gap-2"
-                >
-                    {loading ? (
-                        <>
-                            <div className="loader" />
-                            <span>Regenerating...</span>
-                        </>
-                    ) : (
-                        <>
-                            <span>↺</span>
-                            <span>Regenerate Letter</span>
-                        </>
-                    )}
-                </button>
-                <button
-                    onClick={generateInterviewPrep}  // Changed to generateInterviewPrep
-                    disabled={loading}
-                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 
-                        transition-colors disabled:bg-gray-400 flex items-center gap-2"
-                >
-                    {loading ? (
-                        <>
-                            <div className="loader" />
-                            <span>Preparing...</span>
-                        </>
-                    ) : (
-                        <>
-                            <span>Prepare for Interview →</span>
-                        </>
-                    )}
-                </button>
-            </div>
-        </div>
-    );
-
-    // Cover Letter Generation Function
-    const generateCoverLetter = async () => {
-        setLoading(true);
-        try {
-            const result = await makeApiCall(
-                prompts.coverLetter,
-                `CV:\n${cv}\n\nJob Description:\n${jobDescription}\n\nGenerate a professional cover letter that highlights matching skills and experience.`
             );
-            setCoverLetter(result);
-            setStep(4);
-        } catch (error) {
-            alert('Error generating cover letter: ' + error.message);
-        }
-        setLoading(false);
-    };
-    // Interview Preparation Component
-// Interview Preparation Component
-const InterviewPrepSection = () => (
-        <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg mb-6">
-                <h3 className="font-semibold text-blue-800 mb-2">Interview Preparation Guide</h3>
-                <p className="text-sm text-blue-600">
-                    Below are custom interview questions based on your CV and the job requirements. 
-                    Each answer follows the STAR format: Situation, Task, Action, and Result.
-                </p>
-            </div>
 
-            {Array.isArray(interviewQuestions) && interviewQuestions.map((qa, index) => (
-                <div key={index} className="border rounded-lg p-6 space-y-4">
-                    <div className="flex items-center gap-3">
-                        <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                            Question {index + 1}
-                        </span>
-                    </div>
-                    <div className="font-medium text-lg text-gray-800">
-                        {qa.question || 'Question not available'}
-                    </div>
-                    
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                        <div className="font-medium text-gray-700 mb-2">Suggested Answer:</div>
-                        <div className="text-gray-600 whitespace-pre-line">
-                            {qa.suggestedAnswer || 'Answer not available'}
+            const GettingStartedSection = () => (
+                <div className="space-y-8">
+                    <div className="bg-white rounded-lg shadow-lg p-8">
+                        <h2 className="text-3xl font-bold mb-6">Welcome to Bespoke CV AI Job Application Assistant</h2>
+                        
+                        {/* New API Key Instructions */}
+                        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-8">
+                            <h3 className="text-lg font-semibold text-yellow-800 mb-2">🔑 Important: OpenAI API Key Required</h3>
+                            <p className="text-yellow-700">
+                                This tool uses OpenAI's powerful AI to analyze your applications. You'll need to provide your OpenAI API key in the settings section (upper right) to get started. 
+                                You can get your API key from the <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">OpenAI dashboard</a>.
+                            </p>
+                        </div>
+
+                        <div className="space-y-6 text-gray-600">
+                            <p className="text-lg">This tool helps you optimize your job application process from start to finish. Here's what you can do:</p>
+                            
+                            <div className="grid md:grid-cols-2 gap-6">
+                                <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
+                                    <h3 className="text-xl font-semibold text-blue-600 mb-3">🎯 ATS Optimization</h3>
+                                    <p>Our AI-powered system analyzes your CV against job descriptions to ensure it passes Applicant Tracking Systems (ATS). Get detailed feedback and improvement suggestions.</p>
+                                </div>
+                                
+                                <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
+                                    <h3 className="text-xl font-semibold text-blue-600 mb-3">📝 Custom Cover Letter</h3>
+                                    <p>Generate tailored cover letters that highlight your relevant skills and experience for specific positions. Save time while maintaining professionalism.</p>
+                                </div>
+                                
+                                <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
+                                    <h3 className="text-xl font-semibold text-blue-600 mb-3">🎤 Interview Preparation</h3>
+                                    <p>Get customized interview questions and STAR-format answers based on your experience and the job requirements. Be prepared for your interview.</p>
+                                </div>
+                                
+                                <div className="border rounded-lg p-6 hover:shadow-lg transition-shadow">
+                                    <h3 className="text-xl font-semibold text-blue-600 mb-3">💰 Salary Insights</h3>
+                                    <p>Receive salary range estimates and negotiation tips specific to the position and your qualifications. Enter negotiations with confidence.</p>
+                                </div>
+                            </div>
+
+                            {/* Updated button section with API key status */}
+                            <div className="flex flex-col items-center mt-8 space-y-4">
+                                {!apiKey ? (
+                                    <div className="text-center">
+                                        <p className="text-red-600 mb-2">⚠️ Please add your OpenAI API key in Settings first</p>
+                                        <button
+                                            onClick={() => setShowSettings(true)}
+                                            className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold transition-colors"
+                                        >
+                                            Add API Key in Settings
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <button
+                                        onClick={() => {
+                                            if (!apiKey) {
+                                                setShowSettings(true);
+                                            } else {
+                                                setShowGettingStarted(false);
+                                                setStep(1);
+                                            }
+                                        }}
+                                        className="bg-blue-500 hover:bg-blue-600 text-white px-8 py-3 rounded-lg text-lg font-semibold transition-colors"
+                                    >
+                                        Let's Get Started →
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
-            ))}
-
-            <div className="flex justify-between items-center">
-                <button
-                    onClick={generateInterviewPrep}
-                    disabled={loading}
-                    className="text-blue-600 hover:text-blue-700 flex items-center gap-2"
-                >
-                    {loading ? (
-                        <>
-                            <div className="loader" />
-                            <span>Regenerating...</span>
-                        </>
-                    ) : (
-                        <>
-                            <span>↺</span>
-                            <span>Generate New Questions</span>
-                        </>
-                    )}
-                </button>
-                <button
-                    onClick={analyzeSalary}
-                    disabled={loading}
-                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 
-                        transition-colors disabled:bg-gray-400 flex items-center gap-2"
-                >
-                    {loading ? (
-                        <>
-                            <div className="loader" />
-                            <span>Analyzing...</span>
-                        </>
-                    ) : (
-                        <>
-                            <span>Salary Analysis →</span>
-                        </>
-                    )}
-                </button>
-            </div>
-        </div>
-    );
-
-    // Interview Prep Generation Function
-    const generateInterviewPrep = async () => {
-        setLoading(true);
-        try {
-            const result = await makeApiCall(
-                prompts.interview,
-                `CV:\n${cv}\n\nJob Description:\n${jobDescription}`
             );
-            let parsedQuestions;
-            try {
-                parsedQuestions = JSON.parse(result);
-                if (!Array.isArray(parsedQuestions)) {
-                    throw new Error('Response is not an array');
-                }
-            } catch (parseError) {
-                console.error('Error parsing interview questions:', parseError);
-                alert('Error: Invalid response format from AI. Please try again.');
-                return;
-            }
-            setInterviewQuestions(parsedQuestions);
-            setStep(5);
-        } catch (error) {
-            alert('Error generating interview questions: ' + error.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-    // Salary Analysis Component
-    const SalarySection = () => (
-        <div className="space-y-6">
-            <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-800 mb-2">Salary Insights & Negotiation</h3>
-                <p className="text-sm text-blue-600">
-                    Based on the job description and market data, here's your salary guidance and negotiation strategy.
-                </p>
-            </div>
 
-            <div className="bg-white rounded-lg border p-6">
-                <div className="mb-8">
-                    <h3 className="text-lg font-semibold mb-4">Expected Salary Range</h3>
-                    <div className="text-3xl font-bold text-green-600 text-center">
-                        ${salaryInfo.salaryRange.min.toLocaleString()} - ${salaryInfo.salaryRange.max.toLocaleString()}
-                    </div>
-                </div>
-                
-                <div>
-                    <h3 className="text-lg font-semibold mb-4">Negotiation Strategy</h3>
-                    <div className="space-y-3">
-                        {salaryInfo.negotiationTips.map((tip, index) => (
-                            <div key={index} className="flex items-start gap-3 bg-gray-50 p-4 rounded">
-                                <span className="text-green-500 font-bold">●</span>
-                                <span className="text-gray-700">{tip}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            <div className="flex justify-center mt-8">
-                <button
-                    onClick={() => setStep(1)}
-                    className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors"
-                >
-                    Start New Analysis
-                </button>
-            </div>
-        </div>
-    );
-
-    // Salary Analysis Function
-    const analyzeSalary = async () => {
-        setLoading(true);
-        try {
-            const result = await makeApiCall(
-                prompts.salary,
-                `Job Description:\n${jobDescription}`
-            );
-            setSalaryInfo(JSON.parse(result));
-            setStep(6);
-        } catch (error) {
-            alert('Error analyzing salary: ' + error.message);
-        }
-        setLoading(false);
-    };
-    // Settings Menu Component
-    const SettingsMenu = () => (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
-                <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Settings</h2>
-                    <button 
-                        onClick={() => setShowSettings(false)}
-                        className="text-gray-500 hover:text-gray-700"
-                    >
-                        ✕
-                    </button>
-                </div>
-                
-                <div className="space-y-4">
+            // Document Upload Component
+            const DocumentUpload = () => (
+                <div className="space-y-6">
                     <div>
-                        <label className="block mb-2 font-semibold">API Key</label>
-                        <input
-                            type="password"
-                            value={apiKey}
-                            onChange={(e) => {
-                                setApiKey(e.target.value);
-                                localStorage.setItem('openai_api_key', e.target.value);
-                            }}
-                            className="w-full p-2 border rounded"
-                        />
-                    </div>
-                    
-                    <div>
-                        <label className="block mb-2 font-semibold">Analysis Prompt</label>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block font-semibold">Your CV</label>
+                            <button
+                                onClick={() => setCV('')}
+                                className="text-sm text-red-600 hover:text-red-700"
+                            >
+                                Clear
+                            </button>
+                        </div>
                         <textarea
-                            value={prompts.analysis}
-                            onChange={(e) => savePrompts({...prompts, analysis: e.target.value})}
-                            className="w-full h-32 p-2 border rounded"
+                            className="w-full h-48 p-4 border rounded font-mono text-sm"
+                            placeholder="Paste your CV here..."
+                            value={cv}
+                            onChange={(e) => setCV(e.target.value)}
                         />
+                        <p className="mt-1 text-sm text-gray-500">
+                            Paste your CV in plain text format. Include your experience, skills, and qualifications.
+                        </p>
                     </div>
                     
                     <div>
-                        <label className="block mb-2 font-semibold">Cover Letter Prompt</label>
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block font-semibold">Job Description</label>
+                            <button
+                                onClick={() => setJobDescription('')}
+                                className="text-sm text-red-600 hover:text-red-700"
+                            >
+                                Clear
+                            </button>
+                        </div>
                         <textarea
-                            value={prompts.coverLetter}
-                            onChange={(e) => savePrompts({...prompts, coverLetter: e.target.value})}
-                            className="w-full h-32 p-2 border rounded"
+                            className="w-full h-48 p-4 border rounded font-mono text-sm"
+                            placeholder="Paste the job description here..."
+                            value={jobDescription}
+                            onChange={(e) => setJobDescription(e.target.value)}
                         />
+                        <p className="mt-1 text-sm text-gray-500">
+                            Paste the complete job description, including requirements and responsibilities.
+                        </p>
                     </div>
-                    
-                    <div>
-                        <label className="block mb-2 font-semibold">Interview Prep Prompt</label>
-                        <textarea
-                            value={prompts.interview}
-                            onChange={(e) => savePrompts({...prompts, interview: e.target.value})}
-                            className="w-full h-32 p-2 border rounded"
-                        />
-                    </div>
-                    
-                    <div>
-                        <label className="block mb-2 font-semibold">Salary Analysis Prompt</label>
-                        <textarea
-                            value={prompts.salary}
-                            onChange={(e) => savePrompts({...prompts, salary: e.target.value})}
-                            className="w-full h-32 p-2 border rounded"
-                        />
-                    </div>
-                    
-                    <div className="flex justify-end gap-4">
-                        <button
-                            onClick={resetPrompts}
-                            className="px-4 py-2 text-red-600 border border-red-600 rounded hover:bg-red-50"
-                        >
-                            Reset to Defaults
-                        </button>
-                        <button
-                            onClick={() => setShowSettings(false)}
-                            className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-                        >
-                            Save & Close
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-    // Main app render
 
-    const Footer = () => (
-        <div className="mt-12 py-4 border-t text-center text-gray-600">
-            <p className="text-sm">
-                Created by <a 
-                    href="https://github.com/jmesplana" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-blue-600 hover:text-blue-800 font-medium"
-                >
-                    John Mark Esplana
-                </a>
-            </p>
-        </div>
-    );
-
-    // Then update the main return statement to include the footer
-    return (
-    <div className="max-w-4xl mx-auto p-4">
-        <div className="flex justify-between items-center mb-4">
-            <h1 className="text-2xl font-bold">Bespoke CV AI</h1>
-            <button
-                onClick={() => setShowSettings(true)}
-                className="px-3 py-1 text-gray-600 border rounded hover:bg-gray-50"
-            >
-                ⚙️ Settings
-            </button>
-        </div>
-
-        {showSettings && <SettingsMenu />}
-        
-        <StepNavigation />
-        
-        {showGettingStarted ? (
-            <GettingStartedSection />
-        ) : (
-            <>
-                {!apiKey ? (
-                    <div className="bg-white rounded-lg shadow-lg p-8 text-center">
-                        <h2 className="text-2xl font-bold mb-4">OpenAI API Key Required</h2>
-                        <p className="text-gray-600 mb-6">
-                            To use Bespoke CV AI, please add your OpenAI API key. This key is required to power the AI features.
+                    <div className="flex justify-between items-center">
+                        <p className="text-sm text-gray-600">
+                            Both fields are required to proceed with the analysis.
                         </p>
                         <button
-                            onClick={() => setShowSettings(true)}
-                            className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                            onClick={() => setStep(2)}
+                            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors
+                                disabled:bg-gray-300 disabled:cursor-not-allowed"
+                            disabled={!cv || !jobDescription}
                         >
-                            Add API Key in Settings
+                            Start Analysis
                         </button>
                     </div>
-                ) : (
-                    <>
-                        {step === 1 && <DocumentUpload />}
-                        {step === 2 && <AnalysisSection />}
-                        {step === 3 && analysis && <ResultsSection />}
-                        {step === 4 && <CoverLetterSection />}
-                        {step === 5 && <InterviewPrepSection />}
-                        {step === 6 && salaryInfo && <SalarySection />}
-                    </>
-                )}
-            </>
-        )}
-        
-        <Footer />
-    </div>
-);
-}
+                </div>
+            );
 
-const { useState, useEffect } = React;
-ReactDOM.render(<App />, document.getElementById('root'));
+            // API call function updated to use selected model and effort if applicable
+            const makeApiCall = async (prompt, content) => {
+                try {
+                    const requestBody = {
+                        model: apiModel,
+                        messages: [
+                            { role: "system", content: prompt },
+                            { role: "user", content: content }
+                        ]
+                    };
+                    // Only include reasoning_effort if using the o3-mini model
+                    if (apiModel === "o3-mini") {
+                        requestBody.reasoning_effort = modelEffort;
+                    }
+                    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${apiKey.trim()}`
+                        },
+                        body: JSON.stringify(requestBody)
+                    });
+
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error?.message || 'API request failed');
+                    }
+
+                    const data = await response.json();
+                    return data.choices[0].message.content;
+                } catch (error) {
+                    console.error('API Error:', error);
+                    throw new Error(`API request failed: ${error.message}`);
+                }
+            };
+
+            // Analysis Section Component
+            const AnalysisSection = () => (
+                <div className="space-y-6">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                        <h3 className="font-semibold text-blue-800 mb-2">What happens in this step?</h3>
+                        <p className="text-sm text-blue-600">
+                            Our AI will analyze your CV against the job description using ATS algorithms.
+                            You'll receive a compatibility score, keyword analysis, and specific improvements.
+                        </p>
+                    </div>
+
+                    <button
+                        onClick={analyzeCV}
+                        disabled={loading}
+                        className="w-full bg-blue-500 text-white px-4 py-3 rounded hover:bg-blue-600 
+                            transition-colors disabled:bg-gray-400 flex items-center justify-center gap-2"
+                    >
+                        {loading ? (
+                            <>
+                                <div className="loader" />
+                                <span>Analyzing Your CV...</span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="text-xl">🎯</span>
+                                <span>Start ATS Analysis</span>
+                            </>
+                        )}
+                    </button>
+                </div>
+            );
+
+            // Analysis function
+            const analyzeCV = async () => {
+                setLoading(true);
+                try {
+                    const result = await makeApiCall(
+                        prompts.analysis,
+                        `CV:\n${cv}\n\nJob Description:\n${jobDescription}`
+                    );
+                    setAnalysis(JSON.parse(result));
+                    setStep(3);
+                } catch (error) {
+                    alert('Error analyzing CV: ' + error.message);
+                }
+                setLoading(false);
+            };
+
+            // Results Display Component
+            const ResultsSection = () => (
+                <div className="space-y-6">
+                    <div className="bg-white rounded-lg border p-6">
+                        <div className="text-center mb-8">
+                            <div className="inline-block p-4 bg-blue-50 rounded-full mb-2">
+                                <div className="text-4xl font-bold text-blue-600">
+                                    {analysis.matchPercentage}%
+                                </div>
+                                <div className="text-sm text-blue-800">ATS Match Score</div>
+                            </div>
+                            
+                            <div className="mt-2 text-gray-600">
+                                {analysis.matchPercentage >= 80 
+                                    ? "Excellent match! Your CV is well-aligned with the job requirements."
+                                    : analysis.matchPercentage >= 60
+                                        ? "Good match with room for improvement. Consider the suggestions below."
+                                        : "Consider revising your CV based on the suggestions below to improve matching."}
+                            </div>
+                        </div>
+
+                        <div className="grid md:grid-cols-2 gap-6">
+                            <div className="space-y-3">
+                                <h3 className="font-semibold text-gray-800">✓ Matching Keywords</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {analysis.matchingKeywords.map((keyword, index) => (
+                                        <span key={index} className="px-3 py-1 bg-green-50 text-green-700 rounded-full text-sm">
+                                            {keyword}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div className="space-y-3">
+                                <h3 className="font-semibold text-gray-800">⚠ Missing Keywords</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {analysis.missingKeywords.map((keyword, index) => (
+                                        <span key={index} className="px-3 py-1 bg-red-50 text-red-700 rounded-full text-sm">
+                                            {keyword}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="mt-6">
+                            <h3 className="font-semibold text-gray-800 mb-3">📝 Improvement Suggestions</h3>
+                            <div className="space-y-2">
+                                {analysis.suggestions.map((suggestion, index) => (
+                                    <div key={index} className="flex items-start gap-2 bg-gray-50 p-3 rounded">
+                                        <span className="text-blue-500">•</span>
+                                        <span className="text-gray-700">{suggestion}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                        <button
+                            onClick={() => setStep(1)}
+                            className="text-gray-600 hover:text-gray-800"
+                        >
+                            ← Edit Documents
+                        </button>
+                        <button
+                            onClick={generateCoverLetter}
+                            disabled={loading}
+                            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 
+                                transition-colors disabled:bg-gray-400 flex items-center gap-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="loader" />
+                                    <span>Generating...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Generate Cover Letter →</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Cover Letter Component
+            const CoverLetterSection = () => (
+                <div className="space-y-6">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                        <h3 className="font-semibold text-blue-800 mb-2">About Your Cover Letter</h3>
+                        <p className="text-sm text-blue-600">
+                            This cover letter is generated based on your CV and the job description, highlighting your most relevant experiences and skills.
+                            Feel free to edit and personalize it further.
+                        </p>
+                    </div>
+
+                    <div className="border rounded-lg p-4">
+                        <textarea
+                            className="w-full h-96 p-4 font-mono text-sm focus:outline-none"
+                            value={coverLetter}
+                            onChange={(e) => setCoverLetter(e.target.value)}
+                            placeholder="Your cover letter will appear here..."
+                        />
+                    </div>
+
+                    <div className="flex justify-between items-center">
+                        <button
+                            onClick={generateCoverLetter}
+                            disabled={loading}
+                            className="text-blue-600 hover:text-blue-700 flex items-center gap-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="loader" />
+                                    <span>Regenerating...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>↺</span>
+                                    <span>Regenerate Letter</span>
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={generateInterviewPrep}
+                            disabled={loading}
+                            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 
+                                transition-colors disabled:bg-gray-400 flex items-center gap-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="loader" />
+                                    <span>Preparing...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Prepare for Interview →</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Cover Letter Generation Function
+            const generateCoverLetter = async () => {
+                setLoading(true);
+                try {
+                    const result = await makeApiCall(
+                        prompts.coverLetter,
+                        `CV:\n${cv}\n\nJob Description:\n${jobDescription}\n\nGenerate a professional cover letter that highlights matching skills and experience.`
+                    );
+                    setCoverLetter(result);
+                    setStep(4);
+                } catch (error) {
+                    alert('Error generating cover letter: ' + error.message);
+                }
+                setLoading(false);
+            };
+
+            // Interview Preparation Component
+            const InterviewPrepSection = () => (
+                <div className="space-y-6">
+                    <div className="bg-blue-50 p-4 rounded-lg mb-6">
+                        <h3 className="font-semibold text-blue-800 mb-2">Interview Preparation Guide</h3>
+                        <p className="text-sm text-blue-600">
+                            Below are custom interview questions based on your CV and the job requirements. 
+                            Each answer follows the STAR format: Situation, Task, Action, and Result.
+                        </p>
+                    </div>
+
+                    {Array.isArray(interviewQuestions) && interviewQuestions.map((qa, index) => (
+                        <div key={index} className="border rounded-lg p-6 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                                    Question {index + 1}
+                                </span>
+                            </div>
+                            <div className="font-medium text-lg text-gray-800">
+                                {qa.question || 'Question not available'}
+                            </div>
+                            
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <div className="font-medium text-gray-700 mb-2">Suggested Answer:</div>
+                                <div className="text-gray-600 whitespace-pre-line">
+                                    {qa.suggestedAnswer || 'Answer not available'}
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+
+                    <div className="flex justify-between items-center">
+                        <button
+                            onClick={generateInterviewPrep}
+                            disabled={loading}
+                            className="text-blue-600 hover:text-blue-700 flex items-center gap-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="loader" />
+                                    <span>Regenerating...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>↺</span>
+                                    <span>Generate New Questions</span>
+                                </>
+                            )}
+                        </button>
+                        <button
+                            onClick={analyzeSalary}
+                            disabled={loading}
+                            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 
+                                transition-colors disabled:bg-gray-400 flex items-center gap-2"
+                        >
+                            {loading ? (
+                                <>
+                                    <div className="loader" />
+                                    <span>Analyzing...</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>Salary Analysis →</span>
+                                </>
+                            )}
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Interview Prep Generation Function
+            const generateInterviewPrep = async () => {
+                setLoading(true);
+                try {
+                    const result = await makeApiCall(
+                        prompts.interview,
+                        `CV:\n${cv}\n\nJob Description:\n${jobDescription}`
+                    );
+                    let parsedQuestions;
+                    try {
+                        parsedQuestions = JSON.parse(result);
+                        if (!Array.isArray(parsedQuestions)) {
+                            throw new Error('Response is not an array');
+                        }
+                    } catch (parseError) {
+                        console.error('Error parsing interview questions:', parseError);
+                        alert('Error: Invalid response format from AI. Please try again.');
+                        return;
+                    }
+                    setInterviewQuestions(parsedQuestions);
+                    setStep(5);
+                } catch (error) {
+                    alert('Error generating interview questions: ' + error.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Salary Analysis Component
+            const SalarySection = () => (
+                <div className="space-y-6">
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                        <h3 className="font-semibold text-blue-800 mb-2">Salary Insights & Negotiation</h3>
+                        <p className="text-sm text-blue-600">
+                            Based on the job description and market data, here's your salary guidance and negotiation strategy.
+                        </p>
+                    </div>
+
+                    <div className="bg-white rounded-lg border p-6">
+                        <div className="mb-8">
+                            <h3 className="text-lg font-semibold mb-4">Expected Salary Range</h3>
+                            <div className="text-3xl font-bold text-green-600 text-center">
+                                ${salaryInfo.salaryRange.min.toLocaleString()} - ${salaryInfo.salaryRange.max.toLocaleString()}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 className="text-lg font-semibold mb-4">Negotiation Strategy</h3>
+                            <div className="space-y-3">
+                                {salaryInfo.negotiationTips.map((tip, index) => (
+                                    <div key={index} className="flex items-start gap-3 bg-gray-50 p-4 rounded">
+                                        <span className="text-green-500 font-bold">●</span>
+                                        <span className="text-gray-700">{tip}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-center mt-8">
+                        <button
+                            onClick={() => setStep(1)}
+                            className="bg-blue-500 text-white px-6 py-2 rounded hover:bg-blue-600 transition-colors"
+                        >
+                            Start New Analysis
+                        </button>
+                    </div>
+                </div>
+            );
+
+            // Salary Analysis Function
+            const analyzeSalary = async () => {
+                setLoading(true);
+                try {
+                    const result = await makeApiCall(
+                        prompts.salary,
+                        `Job Description:\n${jobDescription}`
+                    );
+                    setSalaryInfo(JSON.parse(result));
+                    setStep(6);
+                } catch (error) {
+                    alert('Error analyzing salary: ' + error.message);
+                }
+                setLoading(false);
+            };
+
+            // Settings Menu Component with new API Model & Reasoning Effort selections
+            const SettingsMenu = () => (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white p-6 rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto">
+                        <div className="flex justify-between items-center mb-4">
+                            <h2 className="text-xl font-bold">Settings</h2>
+                            <button 
+                                onClick={() => setShowSettings(false)}
+                                className="text-gray-500 hover:text-gray-700"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        
+                        <div className="space-y-4">
+                            <div>
+                                <label className="block mb-2 font-semibold">API Key</label>
+                                <input
+                                    type="password"
+                                    value={apiKey}
+                                    onChange={(e) => {
+                                        setApiKey(e.target.value);
+                                        localStorage.setItem('openai_api_key', e.target.value);
+                                    }}
+                                    className="w-full p-2 border rounded"
+                                />
+                            </div>
+                            
+                            {/* New API Model Selection */}
+                            <div>
+                                <label className="block mb-2 font-semibold">API Model</label>
+                                <select
+                                    value={apiModel}
+                                    onChange={(e) => {
+                                        setApiModel(e.target.value);
+                                        localStorage.setItem('api_model', e.target.value);
+                                    }}
+                                    className="w-full p-2 border rounded"
+                                >
+                                    <option value="o3-mini">o3-mini</option>
+                                    <option value="gpt-3.5-turbo">gpt-3.5-turbo</option>
+                                    <option value="gpt-4">gpt-4</option>
+                                </select>
+                            </div>
+                            
+                            {/* Only show Reasoning Effort selection if the o3-mini model is selected */}
+                            {apiModel === "o3-mini" && (
+                                <div>
+                                    <label className="block mb-2 font-semibold">Reasoning Effort</label>
+                                    <select
+                                        value={modelEffort}
+                                        onChange={(e) => {
+                                            setModelEffort(e.target.value);
+                                            localStorage.setItem('model_effort', e.target.value);
+                                        }}
+                                        className="w-full p-2 border rounded"
+                                    >
+                                        <option value="low">Low</option>
+                                        <option value="medium">Medium</option>
+                                        <option value="high">High</option>
+                                    </select>
+                                </div>
+                            )}
+                            
+                            <div>
+                                <label className="block mb-2 font-semibold">Analysis Prompt</label>
+                                <textarea
+                                    value={prompts.analysis}
+                                    onChange={(e) => savePrompts({...prompts, analysis: e.target.value})}
+                                    className="w-full h-32 p-2 border rounded"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block mb-2 font-semibold">Cover Letter Prompt</label>
+                                <textarea
+                                    value={prompts.coverLetter}
+                                    onChange={(e) => savePrompts({...prompts, coverLetter: e.target.value})}
+                                    className="w-full h-32 p-2 border rounded"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block mb-2 font-semibold">Interview Prep Prompt</label>
+                                <textarea
+                                    value={prompts.interview}
+                                    onChange={(e) => savePrompts({...prompts, interview: e.target.value})}
+                                    className="w-full h-32 p-2 border rounded"
+                                />
+                            </div>
+                            
+                            <div>
+                                <label className="block mb-2 font-semibold">Salary Analysis Prompt</label>
+                                <textarea
+                                    value={prompts.salary}
+                                    onChange={(e) => savePrompts({...prompts, salary: e.target.value})}
+                                    className="w-full h-32 p-2 border rounded"
+                                />
+                            </div>
+                            
+                            <div className="flex justify-end gap-4">
+                                <button
+                                    onClick={resetPrompts}
+                                    className="px-4 py-2 text-red-600 border border-red-600 rounded hover:bg-red-50"
+                                >
+                                    Reset to Defaults
+                                </button>
+                                <button
+                                    onClick={() => setShowSettings(false)}
+                                    className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+                                >
+                                    Save & Close
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+
+            const Footer = () => (
+                <div className="mt-12 py-4 border-t text-center text-gray-600">
+                    <p className="text-sm">
+                        Created by <a 
+                            href="https://github.com/jmesplana" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                            John Mark Esplana
+                        </a>
+                    </p>
+                </div>
+            );
+
+            return (
+                <div className="max-w-4xl mx-auto p-4">
+                    <div className="flex justify-between items-center mb-4">
+                        <h1 className="text-2xl font-bold">Bespoke CV AI</h1>
+                        <button
+                            onClick={() => setShowSettings(true)}
+                            className="px-3 py-1 text-gray-600 border rounded hover:bg-gray-50"
+                        >
+                            ⚙️ Settings
+                        </button>
+                    </div>
+
+                    {showSettings && <SettingsMenu />}
+                    
+                    <StepNavigation />
+                    
+                    {showGettingStarted ? (
+                        <GettingStartedSection />
+                    ) : (
+                        <>
+                            {!apiKey ? (
+                                <div className="bg-white rounded-lg shadow-lg p-8 text-center">
+                                    <h2 className="text-2xl font-bold mb-4">OpenAI API Key Required</h2>
+                                    <p className="text-gray-600 mb-6">
+                                        To use Bespoke CV AI, please add your OpenAI API key. This key is required to power the AI features.
+                                    </p>
+                                    <button
+                                        onClick={() => setShowSettings(true)}
+                                        className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition-colors"
+                                    >
+                                        Add API Key in Settings
+                                    </button>
+                                </div>
+                            ) : (
+                                <>
+                                    {step === 1 && <DocumentUpload />}
+                                    {step === 2 && <AnalysisSection />}
+                                    {step === 3 && analysis && <ResultsSection />}
+                                    {step === 4 && <CoverLetterSection />}
+                                    {step === 5 && <InterviewPrepSection />}
+                                    {step === 6 && salaryInfo && <SalarySection />}
+                                </>
+                            )}
+                        </>
+                    )}
+                    
+                    <Footer />
+                </div>
+            );
+        }
+
+        ReactDOM.render(<App />, document.getElementById('root'));
     </script>
 </body>
 </html>
